@@ -2,7 +2,7 @@ const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
 const { SnapcastClient } = require("node-snapcast-client");
-const { PulseAudioControl } = require("node-pulseaudio-control");
+const PulseAudio = require("@suldashi/node-pulseaudio");
 
 // Initialize Express
 const app = express();
@@ -58,9 +58,15 @@ app.post(
       if (!pulseClients[clientId]) {
         const clientInfo = await getClientInfo(clientId);
         if (clientInfo) {
-          pulseClients[clientId] = new PulseAudioControl({
+          pulseClients[clientId] = new PulseAudio({
             host: clientInfo.host,
             port: 4713,
+          });
+
+          // Wait for connection
+          await new Promise((resolve, reject) => {
+            pulseClients[clientId].on("connection", resolve);
+            pulseClients[clientId].on("error", reject);
           });
         } else {
           throw new Error(`Client ${clientId} not found`);
@@ -68,7 +74,14 @@ app.post(
       }
 
       // Set volume for the specific speaker
-      await pulseClients[clientId].setSinkVolume(`speaker${speakerId}`, volume);
+      const sinkName = `speaker${speakerId}`;
+      await new Promise((resolve, reject) => {
+        pulseClients[clientId].setSinkVolume(sinkName, volume / 100, (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
       res.json({ success: true });
     } catch (error) {
       console.error(`Error setting speaker volume: ${error}`);
@@ -147,7 +160,7 @@ process.on("SIGINT", async () => {
 
   // Close all PulseAudio connections
   for (const client of Object.values(pulseClients)) {
-    await client.disconnect();
+    client.end();
   }
 
   process.exit(0);
