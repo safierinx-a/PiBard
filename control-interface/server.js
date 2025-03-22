@@ -1,7 +1,7 @@
 const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
-const { SnapcastClient } = require("node-snapcast-client");
+const fetch = require("node-fetch");
 const { exec } = require("child_process");
 const { promisify } = require("util");
 
@@ -12,17 +12,37 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
-// Snapcast client configuration
-const snapcastConfig = {
-  host: process.env.SNAPCAST_HOST || "localhost",
-  port: process.env.SNAPCAST_PORT || 1705,
-};
+// Snapcast configuration
+const SNAPCAST_HOST = process.env.SNAPCAST_HOST || "localhost";
+const SNAPCAST_PORT = process.env.SNAPCAST_PORT || 1705;
+const SNAPCAST_API = `http://${SNAPCAST_HOST}:${SNAPCAST_PORT}/jsonrpc`;
 
-// Initialize Snapcast client
-const snapcast = new SnapcastClient(snapcastConfig);
+// Helper function for Snapcast API calls
+async function snapcastRequest(method, params = {}) {
+  const response = await fetch(SNAPCAST_API, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id: Date.now(),
+      jsonrpc: "2.0",
+      method,
+      params,
+    }),
+  });
 
-// Cache for client SSH connections
-const clientConnections = {};
+  if (!response.ok) {
+    throw new Error(`Snapcast API error: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  if (data.error) {
+    throw new Error(`Snapcast API error: ${data.error.message}`);
+  }
+
+  return data.result;
+}
 
 // Serve static files
 app.use(express.static("public"));
@@ -30,7 +50,7 @@ app.use(express.static("public"));
 // API routes
 app.get("/api/clients", async (req, res) => {
   try {
-    const status = await snapcast.getStatus();
+    const status = await snapcastRequest("Server.GetStatus");
     res.json(status.server.groups);
   } catch (error) {
     console.error("Error fetching clients:", error);
@@ -40,7 +60,7 @@ app.get("/api/clients", async (req, res) => {
 
 app.get("/api/streams", async (req, res) => {
   try {
-    const status = await snapcast.getStatus();
+    const status = await snapcastRequest("Server.GetStatus");
     res.json(status.server.streams);
   } catch (error) {
     console.error("Error fetching streams:", error);
@@ -78,9 +98,9 @@ app.post(
   }
 );
 
-// Helper function to get client info from Snapcast
+// Helper function to get client info
 async function getClientInfo(clientId) {
-  const status = await snapcast.getStatus();
+  const status = await snapcastRequest("Server.GetStatus");
   for (const group of status.server.groups) {
     for (const client of group.clients) {
       if (client.id === clientId) {
@@ -101,9 +121,12 @@ io.on("connection", (socket) => {
   // Set up event handlers
   socket.on("setVolume", async (data) => {
     try {
-      await snapcast.setClientVolume(data.clientId, {
-        volume: data.volume,
-        muted: data.muted,
+      await snapcastRequest("Client.SetVolume", {
+        id: data.clientId,
+        volume: {
+          percent: data.volume,
+          muted: data.muted,
+        },
       });
     } catch (error) {
       console.error("Error setting volume:", error);
@@ -112,7 +135,10 @@ io.on("connection", (socket) => {
 
   socket.on("setStream", async (data) => {
     try {
-      await snapcast.setClientStream(data.clientId, data.streamId);
+      await snapcastRequest("Client.SetStream", {
+        id: data.clientId,
+        stream_id: data.streamId,
+      });
     } catch (error) {
       console.error("Error setting stream:", error);
     }
@@ -123,28 +149,14 @@ io.on("connection", (socket) => {
   });
 });
 
-// Handle Snapcast server events
-snapcast.on("update", (data) => {
-  io.emit("serverUpdate", data);
-});
-
 // Start server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`PiBard Control Server listening on port ${PORT}`);
-
-  // Connect to Snapcast server
-  snapcast.connect().catch((err) => {
-    console.error("Failed to connect to Snapcast server:", err);
-  });
 });
 
 // Handle shutdown
-process.on("SIGINT", async () => {
+process.on("SIGINT", () => {
   console.log("Shutting down...");
-
-  // Disconnect from Snapcast
-  await snapcast.disconnect();
-
   process.exit(0);
 });
