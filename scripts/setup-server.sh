@@ -53,6 +53,10 @@ cp -r public/* /usr/share/snapserver/snapweb/
 cd ..
 
 echo "Step 7: Setting up services..."
+# Ensure systemd can connect to the system bus
+export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket
+
+# Enable and restart Snapserver
 systemctl enable snapserver
 systemctl restart snapserver
 
@@ -60,7 +64,7 @@ systemctl restart snapserver
 ACTUAL_USER=$(logname)
 ACTUAL_UID=$(id -u $ACTUAL_USER)
 export XDG_RUNTIME_DIR=/run/user/$ACTUAL_UID
-su - $ACTUAL_USER -c "systemctl --user restart pipewire pipewire-pulse"
+su - $ACTUAL_USER -c 'export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"; systemctl --user restart pipewire pipewire-pulse'
 
 echo "Step 8: Setting up the control interface server as a service..."
 cat > /etc/systemd/system/pibard-control.service << EOL
