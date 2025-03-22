@@ -23,8 +23,9 @@ echo "Step 1: Installing required dependencies..."
 apt update
 apt install -y snapserver pulseaudio pulseaudio-utils alsa-utils \
   pulseaudio-module-zeroconf pulseaudio-module-bluetooth \
-  shairport-sync pulseaudio-dlna bluetooth bluez-utils \
-  libasound2-plugins nodejs npm
+  shairport-sync pulseaudio-dlna bluetooth bluez \
+  libasound2-plugins libbluetooth3 bluez-tools \
+  nodejs npm
 
 echo "Step 2: Creating necessary directories..."
 mkdir -p /etc/snapserver
