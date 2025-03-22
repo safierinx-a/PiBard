@@ -21,23 +21,21 @@ fi
 
 echo "Step 1: Installing required dependencies..."
 apt update
-apt install -y snapserver pulseaudio pulseaudio-utils alsa-utils \
-  pulseaudio-module-zeroconf pulseaudio-module-bluetooth \
-  shairport-sync pulseaudio-dlna bluetooth bluez \
+apt install -y snapserver pipewire pipewire-pulse pipewire-audio-client-libraries \
+  alsa-utils shairport-sync pulseaudio-dlna bluetooth bluez \
   libasound2-plugins libbluetooth3 bluez-tools \
   nodejs npm
 
 echo "Step 2: Creating necessary directories..."
 mkdir -p /etc/snapserver
-mkdir -p /etc/pulse
+mkdir -p /etc/pipewire
 
 echo "Step 3: Backing up existing configurations..."
 [ -f /etc/snapserver.conf ] && cp /etc/snapserver.conf /etc/snapserver.conf.bak
-[ -f /etc/pulse/default.pa ] && cp /etc/pulse/default.pa /etc/pulse/default.pa.bak
+[ -f /etc/pipewire/pipewire.conf ] && cp /etc/pipewire/pipewire.conf /etc/pipewire/pipewire.conf.bak
 
 echo "Step 4: Copying PiBard server configurations..."
 cp server/configs/snapserver.conf /etc/snapserver.conf
-cp server/configs/pulse-default.pa /etc/pulse/default.pa
 
 echo "Step 5: Setting up audio pipe for streaming..."
 FIFO_FILE="/tmp/snapfifo"
@@ -57,7 +55,9 @@ cd ..
 echo "Step 7: Setting up services..."
 systemctl enable snapserver
 systemctl restart snapserver
-systemctl restart pulseaudio || pulseaudio -k && pulseaudio --start
+
+# Restart PipeWire services
+systemctl --user restart pipewire pipewire-pulse
 
 echo "Step 8: Setting up the control interface server as a service..."
 cat > /etc/systemd/system/pibard-control.service << EOL
@@ -96,7 +96,7 @@ echo "PiBard server installation complete!"
 echo ""
 echo "Your server is now configured with the following services:"
 echo " - Snapcast server (audio streaming)"
-echo " - PulseAudio (audio processing)"
+echo " - PipeWire (audio processing)"
 echo " - Shairport-sync (AirPlay receiver)"
 echo " - PulseAudio-DLNA (DLNA/UPnP receiver)"
 echo " - Bluetooth Audio (Bluetooth A2DP receiver)"
