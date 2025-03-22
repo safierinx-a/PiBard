@@ -1,0 +1,15 @@
+[Unit]
+Description=PiBard Snapcast Client
+After=network-online.target sound.target pulseaudio.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=audio
+ExecStart=/usr/local/bin/start-snapclient.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target 

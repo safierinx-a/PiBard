@@ -1,0 +1,25 @@
+# Node.js
+node_modules/
+npm-debug.log
+dist/
+
+# System files
+.DS_Store
+.env
+*.log
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build files
+control-interface/public/build/
+
+# Backup files
+*.bak
+*~
+
+# PulseAudio
+.pulse-cookie 

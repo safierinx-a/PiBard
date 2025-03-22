@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PiBard Control</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+
+<body>
+    <header>
+        <h1>PiBard Control</h1>
+        <div class="source-selector">
+            <label for="source-select">Audio Source:</label>
+            <select id="source-select">
+                <option value="Default">HTPC</option>
+                <option value="AirPlay">AirPlay</option>
+                <option value="DLNA">DLNA</option>
+                <option value="Bluetooth">Bluetooth</option>
+            </select>
+        </div>
+    </header>
+
+    <main>
+        <section id="clients-container">
+            <h2>Loading clients...</h2>
+            <!-- Client cards will be dynamically inserted here -->
+        </section>
+    </main>
+
+    <template id="client-template">
+        <div class="client-card" data-client-id="">
+            <h3 class="client-name"></h3>
+            <div class="client-controls">
+                <div class="volume-control">
+                    <label>Zone Volume:</label>
+                    <input type="range" class="volume-slider" min="0" max="100" value="70">
+                    <span class="volume-value">70%</span>
+                    <button class="mute-button">Mute</button>
+                </div>
+                <div class="speakers-container">
+                    <!-- Speaker controls will be dynamically inserted here -->
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <template id="speaker-template">
+        <div class="speaker-control" data-speaker-id="">
+            <label class="speaker-name">Speaker</label>
+            <input type="range" class="speaker-volume-slider" min="0" max="100" value="70">
+            <span class="speaker-volume-value">70%</span>
+            <button class="speaker-mute-button">Mute</button>
+        </div>
+    </template>
+
+    <footer>
+        <p>PiBard Multi-Speaker Audio System</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,41 @@
+#!/usr/bin/pulseaudio -nF
+#
+# PulseAudio configuration for PiBard client with per-speaker control
+#
+
+# Load system defaults
+.include /etc/pulse/default.pa
+
+# Load module to allow PulseAudio to accept audio over the network
+load-module module-native-protocol-tcp auth-ip-acl=127.0.0.1;192.168.0.0/16;10.0.0.0/8 auth-anonymous=1
+
+# Set up hardware output sink
+load-module module-alsa-sink device=hw:0,0 sink_name=alsa_output tsched=0
+
+# Create virtual sink for Snapcast
+load-module module-null-sink sink_name=snapcast_sink sink_properties=device.description=SnapcastInput
+
+# Set up per-speaker virtual outputs with remapping
+# For a system with 3 speakers attached to a single sound card
+
+# Speaker 1 - Front Left
+load-module module-remap-sink sink_name=speaker1 master=alsa_output master_channel_map=front-left,front-right channel_map=mono,mono remix=true sink_properties=device.description=Speaker1
+
+# Speaker 2 - Front Right 
+load-module module-remap-sink sink_name=speaker2 master=alsa_output master_channel_map=front-left,front-right channel_map=mono,mono remix=true sink_properties=device.description=Speaker2
+
+# Speaker 3 - Aux output (if available)
+# Uncomment if you have a third speaker on a separate output
+#load-module module-remap-sink sink_name=speaker3 master=alsa_output master_channel_map=aux0,aux1 channel_map=mono,mono remix=true sink_properties=device.description=Speaker3
+
+# Set default sink
+set-default-sink speaker1
+
+# Enable Zeroconf publishing
+load-module module-zeroconf-publish
+
+# Launch Snapclient tunnel
+# Snapclient will output to PulseAudio, which then distributes to our virtual sinks
+load-module module-loopback source=snapcast_sink.monitor sink=speaker1 latency_msec=1
+load-module module-loopback source=snapcast_sink.monitor sink=speaker2 latency_msec=1
+#load-module module-loopback source=snapcast_sink.monitor sink=speaker3 latency_msec=1 

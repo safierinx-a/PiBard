@@ -1,0 +1,31 @@
+#!/usr/bin/pulseaudio -nF
+#
+# PulseAudio configuration for PiBard server
+#
+
+# Load system defaults
+.include /etc/pulse/default.pa
+
+### Audio capture settings
+
+# Load the virtual sink module for capturing system audio
+load-module module-null-sink sink_name=snapcast_sink sink_properties=device.description=SnapcastSink
+load-module module-loopback source=snapcast_sink.monitor sink=@DEFAULT_SINK@
+
+# Create a named pipe for Snapcast
+load-module module-pipe-sink file=/tmp/snapfifo sink_name=snapfifo format=s16le rate=48000 channels=2
+
+# Automatically remap stereo to mono when needed
+load-module module-remap-sink sink_name=mono master=snapcast_sink channels=1 channel_map=mono master_channel_map=front-left,front-right remix=no
+
+# Load RTP receiver for broadcast audio to this system 
+load-module module-rtp-recv
+
+# Allow network connections for remote apps or scripts
+load-module module-native-protocol-tcp auth-ip-acl=127.0.0.1;192.168.0.0/16;10.0.0.0/8 auth-anonymous=1
+
+# Set default sink to our snapcast sink
+set-default-sink snapcast_sink
+
+# Load Zeroconf module for service discovery
+load-module module-zeroconf-publish 
