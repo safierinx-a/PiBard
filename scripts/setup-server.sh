@@ -56,8 +56,11 @@ echo "Step 7: Setting up services..."
 systemctl enable snapserver
 systemctl restart snapserver
 
-# Restart PipeWire services
-systemctl --user restart pipewire pipewire-pulse
+# Restart PipeWire services for the actual user, not root
+ACTUAL_USER=$(logname)
+ACTUAL_UID=$(id -u $ACTUAL_USER)
+export XDG_RUNTIME_DIR=/run/user/$ACTUAL_UID
+su - $ACTUAL_USER -c "systemctl --user restart pipewire pipewire-pulse"
 
 echo "Step 8: Setting up the control interface server as a service..."
 cat > /etc/systemd/system/pibard-control.service << EOL
