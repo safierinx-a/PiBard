@@ -2,7 +2,10 @@ const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
 const { SnapcastClient } = require("node-snapcast-client");
-const PulseAudio = require("@suldashi/node-pulseaudio");
+const { exec } = require("child_process");
+const { promisify } = require("util");
+
+const execAsync = promisify(exec);
 
 // Initialize Express
 const app = express();
@@ -18,8 +21,8 @@ const snapcastConfig = {
 // Initialize Snapcast client
 const snapcast = new SnapcastClient(snapcastConfig);
 
-// PulseAudio control for remote Pi clients
-const pulseClients = {};
+// Cache for client SSH connections
+const clientConnections = {};
 
 // Serve static files
 app.use(express.static("public"));
@@ -54,33 +57,18 @@ app.post(
     const { volume } = req.body;
 
     try {
-      // Connect to PulseAudio on the client Pi if not connected yet
-      if (!pulseClients[clientId]) {
-        const clientInfo = await getClientInfo(clientId);
-        if (clientInfo) {
-          pulseClients[clientId] = new PulseAudio({
-            host: clientInfo.host,
-            port: 4713,
-          });
-
-          // Wait for connection
-          await new Promise((resolve, reject) => {
-            pulseClients[clientId].on("connection", resolve);
-            pulseClients[clientId].on("error", reject);
-          });
-        } else {
-          throw new Error(`Client ${clientId} not found`);
-        }
+      const clientInfo = await getClientInfo(clientId);
+      if (!clientInfo) {
+        throw new Error(`Client ${clientId} not found`);
       }
 
-      // Set volume for the specific speaker
+      // Use pactl to set volume
       const sinkName = `speaker${speakerId}`;
-      await new Promise((resolve, reject) => {
-        pulseClients[clientId].setSinkVolume(sinkName, volume / 100, (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
+      const volumeValue = `${volume}%`;
+
+      // Execute pactl command over SSH
+      const cmd = `ssh ${clientInfo.host} "pactl set-sink-volume ${sinkName} ${volumeValue}"`;
+      await execAsync(cmd);
 
       res.json({ success: true });
     } catch (error) {
@@ -157,11 +145,6 @@ process.on("SIGINT", async () => {
 
   // Disconnect from Snapcast
   await snapcast.disconnect();
-
-  // Close all PulseAudio connections
-  for (const client of Object.values(pulseClients)) {
-    client.end();
-  }
 
   process.exit(0);
 });
