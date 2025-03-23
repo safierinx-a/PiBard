@@ -6,17 +6,11 @@
 # Client settings - customize these for each Pi
 CLIENT_NAME="livingroom"
 SERVER_IP="192.168.1.100"  # Replace with your HTPC IP
-SOUND_OUTPUT="pulse"        # Use PulseAudio output
+SOUND_OUTPUT="pipewire"     # Use PipeWire output
 LATENCY=0                  # Adjust if needed, 0 = automatic
 
 # Advanced options
 BUFFER_MS=1000             # Buffer in ms, increase if audio stutters
-
-# Ensure PulseAudio is running
-pulseaudio --start
-
-# Wait for PulseAudio to initialize
-sleep 2
 
 # Start snapclient with our settings and connect to server 
 snapclient \
@@ -26,12 +20,9 @@ snapclient \
   --latency ${LATENCY} \
   --buffer ${BUFFER_MS}
 
-# If snapclient exits for any reason, restart PulseAudio and try again
+# If snapclient exits for any reason, try again with safer settings
 if [ $? -ne 0 ]; then
-  echo "Snapclient exited with error, restarting..."
-  pulseaudio -k
-  sleep 2
-  pulseaudio --start
+  echo "Snapclient exited with error, retrying with safer settings..."
   sleep 2
   
   # Try one more time with safer settings

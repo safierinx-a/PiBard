@@ -78,8 +78,8 @@ EOL
 
 echo "Step 5: Creating Snapclient startup script..."
 # Customize and copy the start script
-sed -i "s/CLIENT_NAME=\"livingroom\"/CLIENT_NAME=\"$CLIENT_NAME\"/" clients/scripts/start-snapclient.sh
-sed -i "s/SERVER_IP=\"192.168.1.100\"/SERVER_IP=\"$SERVER_IP\"/" clients/scripts/start-snapclient.sh
+sed -i "s|CLIENT_NAME=\"livingroom\"|CLIENT_NAME=\"$CLIENT_NAME\"|" clients/scripts/start-snapclient.sh
+sed -i "s|SERVER_IP=\"192.168.1.100\"|SERVER_IP=\"$SERVER_IP\"|" clients/scripts/start-snapclient.sh
 cp clients/scripts/start-snapclient.sh /usr/local/bin/
 chmod +x /usr/local/bin/start-snapclient.sh
 
@@ -120,6 +120,13 @@ cp clients/configs/snapclient.service /etc/systemd/system/
 # Modify the service to use the local user instead of hardcoded "pi"
 CURRENT_USER=$(logname)
 sed -i "s/User=pi/User=$CURRENT_USER/" /etc/systemd/system/snapclient.service
+
+# Set the correct runtime directory for the user
+CURRENT_UID=$(id -u $CURRENT_USER)
+sed -i "s|Environment=XDG_RUNTIME_DIR=/run/user/1000|Environment=XDG_RUNTIME_DIR=/run/user/$CURRENT_UID|" /etc/systemd/system/snapclient.service
+
+# Fix the CURRENT_USER in volume control service
+sed -i "/User=/c\User=$CURRENT_USER" /etc/systemd/system/pibard-volume.service
 
 # Enable and start services
 systemctl daemon-reload
