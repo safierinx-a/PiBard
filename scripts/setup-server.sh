@@ -22,8 +22,8 @@ fi
 echo "Step 1: Installing required dependencies..."
 apt update
 apt install -y snapserver pipewire pipewire-pulse pipewire-audio-client-libraries \
-  alsa-utils shairport-sync bluetooth bluez bluez-alsa \
-  libasound2-plugins libbluetooth3 bluez-tools \
+  alsa-utils shairport-sync bluetooth bluez libspa-0.2-bluetooth \
+  libasound2-plugins libbluetooth3 bluez-tools wireplumber \
   nodejs npm
 
 echo "Step 2: Creating necessary directories..."
@@ -48,7 +48,16 @@ chown -R _snapserver:_snapserver /var/run/snapserver /var/lib/snapserver
 echo "Step 4: Copying PiBard server configurations..."
 cp server/configs/snapserver.conf /etc/snapserver.conf
 
-echo "Step 5: Setting up audio pipe for streaming..."
+# Create WirePlumber configuration for Bluetooth
+echo "Step 5: Configuring Bluetooth audio..."
+mkdir -p /etc/wireplumber/bluetooth.lua.d/
+cat > /etc/wireplumber/bluetooth.lua.d/51-bluez-config.lua << EOL
+bluez_monitor.properties = {
+  ["with-logind"] = false,
+}
+EOL
+
+echo "Step 6: Setting up audio pipe for streaming..."
 FIFO_FILE="/tmp/snapfifo"
 if [ ! -p "$FIFO_FILE" ]; then
     mkfifo "$FIFO_FILE"
@@ -64,14 +73,14 @@ else
 fi
 sysctl -p
 
-echo "Step 6: Installing and configuring the control interface..."
+echo "Step 7: Installing and configuring the control interface..."
 cd control-interface
 npm install
 npm run build
 cp -r public/* /usr/share/snapserver/snapweb/
 cd ..
 
-echo "Step 7: Configuring firewall (if installed)..."
+echo "Step 8: Configuring firewall (if installed)..."
 if command -v ufw > /dev/null; then
     ufw allow 1704/tcp comment "Snapcast TCP"
     ufw allow 1704/udp comment "Snapcast UDP"
@@ -81,7 +90,7 @@ if command -v ufw > /dev/null; then
     ufw allow 5353/udp comment "mDNS"
 fi
 
-echo "Step 8: Setting up services..."
+echo "Step 9: Setting up services..."
 # Create systemd service file
 cat > /usr/lib/systemd/system/snapserver.service << EOL
 [Unit]
@@ -109,10 +118,15 @@ systemctl restart snapserver
 # Restart PipeWire services for the actual user
 ACTUAL_USER=$(logname)
 ACTUAL_UID=$(id -u $ACTUAL_USER)
-export XDG_RUNTIME_DIR=/run/user/$ACTUAL_UID
-su - $ACTUAL_USER -c 'export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"; systemctl --user restart pipewire pipewire-pulse'
 
-echo "Step 9: Setting up the control interface server as a service..."
+# Enable lingering for the user to keep PipeWire running after logout
+loginctl enable-linger $ACTUAL_USER
+
+# Restart PipeWire services
+export XDG_RUNTIME_DIR=/run/user/$ACTUAL_UID
+su - $ACTUAL_USER -c 'export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"; systemctl --user restart pipewire pipewire-pulse wireplumber'
+
+echo "Step 10: Setting up the control interface server as a service..."
 cat > /etc/systemd/system/pibard-control.service << EOL
 [Unit]
 Description=PiBard Control Interface
@@ -148,10 +162,8 @@ echo "Access the web control interface at:"
 echo " - Snapcast web interface: http://$SERVER_IP:1780"
 echo " - PiBard control interface: http://$SERVER_IP:3000"
 echo ""
-echo "IMPORTANT: Remote volume control requires SSH key-based authentication"
-echo "to your Raspberry Pi clients. Make sure you set up SSH keys with:"
-echo "  ssh-keygen -t ed25519"
-echo "  ssh-copy-id pi@<client-ip-address>"
+echo "Note: For MQTT-based volume control to work, clients must be able"
+echo "to connect to your MQTT broker at 192.168.1.154"
 echo ""
 echo "Important: Make note of your server IP ($SERVER_IP) for client setup"
 echo "===================================================================" 
