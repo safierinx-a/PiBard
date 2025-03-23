@@ -22,7 +22,7 @@ fi
 echo "Step 1: Installing required dependencies..."
 apt update
 apt install -y snapserver pipewire pipewire-pulse pipewire-audio-client-libraries \
-  alsa-utils shairport-sync bluetooth bluez bluealsa \
+  alsa-utils shairport-sync bluetooth bluez bluez-alsa \
   libasound2-plugins libbluetooth3 bluez-tools \
   nodejs npm
 

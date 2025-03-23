@@ -39,7 +39,7 @@ fi
 echo "Step 1: Installing required dependencies..."
 apt update
 apt install -y snapclient pipewire pipewire-pulse pipewire-audio-client-libraries \
-  alsa-utils libasound2-plugins nodejs npm
+  alsa-utils libasound2-plugins nodejs npm wireplumber
 
 echo "Step 2: Creating necessary directories..."
 mkdir -p /etc/pipewire

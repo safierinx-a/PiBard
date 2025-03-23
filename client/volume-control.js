@@ -73,13 +73,20 @@ mqttClient.on("message", async (topic, message) => {
   }
 });
 
-// Set volume using pactl
+// Set volume using PipeWire's wpctl command
 async function setVolume(speakerId, volume) {
   const sinkName = `speaker${speakerId}`;
-  const volumeValue = `${volume}%`;
+  const volumeValue = volume / 100; // wpctl uses 0.0-1.0 scale
 
-  console.log(`Setting ${sinkName} volume to ${volumeValue}`);
-  await execAsync(`pactl set-sink-volume ${sinkName} ${volumeValue}`);
+  console.log(`Setting ${sinkName} volume to ${volume}%`);
+  try {
+    // First try with wpctl (PipeWire)
+    await execAsync(`wpctl set-volume ${sinkName} ${volumeValue.toFixed(2)}`);
+  } catch (error) {
+    // Fall back to pactl if wpctl isn't available
+    console.log("wpctl failed, falling back to pactl");
+    await execAsync(`pactl set-sink-volume ${sinkName} ${volume}%`);
+  }
 }
 
 // Publish status back to server
