@@ -1,0 +1,12 @@
+{
+    "name": "pibard-client",
+    "version": "1.0.0",
+    "description": "PiBard Client Volume Control",
+    "main": "volume-control.js",
+    "scripts": {
+        "start": "node volume-control.js"
+    },
+    "dependencies": {
+        "mqtt": "^5.3.0"
+    }
+}

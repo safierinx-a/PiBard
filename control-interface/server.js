@@ -4,6 +4,7 @@ const socketIo = require("socket.io");
 const fetch = require("node-fetch");
 const { exec } = require("child_process");
 const { promisify } = require("util");
+const mqtt = require("mqtt");
 
 const execAsync = promisify(exec);
 
@@ -16,6 +17,38 @@ const io = socketIo(server);
 const SNAPCAST_HOST = process.env.SNAPCAST_HOST || "localhost";
 const SNAPCAST_PORT = process.env.SNAPCAST_PORT || 1705;
 const SNAPCAST_API = `http://${SNAPCAST_HOST}:${SNAPCAST_PORT}/jsonrpc`;
+
+// MQTT Configuration
+const MQTT_HOST = process.env.MQTT_HOST || "192.168.1.154";
+const MQTT_PORT = process.env.MQTT_PORT || 1883;
+const MQTT_USER = process.env.MQTT_USER || "homeassistant";
+const MQTT_PASSWORD = process.env.MQTT_PASSWORD || "potato";
+const MQTT_TOPIC_PREFIX = "pibard";
+
+// Connect to MQTT broker
+const mqttClient = mqtt.connect(`mqtt://${MQTT_HOST}:${MQTT_PORT}`, {
+  username: MQTT_USER,
+  password: MQTT_PASSWORD,
+});
+
+mqttClient.on("connect", () => {
+  console.log("Connected to MQTT broker");
+  // Subscribe to response topics
+  mqttClient.subscribe(`${MQTT_TOPIC_PREFIX}/clients/+/response`);
+});
+
+mqttClient.on("message", (topic, message) => {
+  const clientId = topic.split("/")[2];
+  console.log(
+    `Received response from client ${clientId}: ${message.toString()}`
+  );
+
+  // Emit the response to the web clients
+  io.emit("clientResponse", {
+    clientId,
+    message: JSON.parse(message.toString()),
+  });
+});
 
 // Helper function for Snapcast API calls
 async function snapcastRequest(method, params = {}) {
@@ -68,7 +101,7 @@ app.get("/api/streams", async (req, res) => {
   }
 });
 
-// Speaker control API
+// Speaker control API using MQTT
 app.post(
   "/api/speakers/:clientId/:speakerId/volume",
   express.json(),
@@ -82,15 +115,16 @@ app.post(
         throw new Error(`Client ${clientId} not found`);
       }
 
-      // Use pactl to set volume
-      const sinkName = `speaker${speakerId}`;
-      const volumeValue = `${volume}%`;
+      // Publish volume command to MQTT
+      const topic = `${MQTT_TOPIC_PREFIX}/clients/${clientId}/command`;
+      const message = JSON.stringify({
+        action: "setVolume",
+        speaker: speakerId,
+        volume: volume,
+      });
 
-      // Execute pactl command over SSH
-      const cmd = `ssh ${clientInfo.host} "pactl set-sink-volume ${sinkName} ${volumeValue}"`;
-      await execAsync(cmd);
-
-      res.json({ success: true });
+      mqttClient.publish(topic, message);
+      res.json({ success: true, message: "Volume command sent" });
     } catch (error) {
       console.error(`Error setting speaker volume: ${error}`);
       res.status(500).json({ error: "Failed to set speaker volume" });
@@ -158,5 +192,6 @@ server.listen(PORT, () => {
 // Handle shutdown
 process.on("SIGINT", () => {
   console.log("Shutting down...");
+  mqttClient.end();
   process.exit(0);
 });

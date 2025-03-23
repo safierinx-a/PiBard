@@ -1,0 +1,16 @@
+[Unit]
+Description=PiBard Volume Control Service
+After=network.target snapclient.service
+
+[Service]
+ExecStart=/usr/bin/node /opt/pibard/volume-control.js
+WorkingDirectory=/opt/pibard
+Restart=always
+User=pi
+Environment=MQTT_HOST=192.168.1.154
+Environment=MQTT_PORT=1883
+Environment=MQTT_USER=homeassistant
+Environment=MQTT_PASSWORD=potato
+
+[Install]
+WantedBy=multi-user.target 
