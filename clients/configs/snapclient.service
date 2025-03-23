@@ -1,13 +1,13 @@
 [Unit]
-Description=PiBard Snapcast Client
-After=network-online.target sound.target pulseaudio.service
+Description=Snapcast client
+After=network-online.target sound.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=pi
-Group=audio
 ExecStart=/usr/local/bin/start-snapclient.sh
+Environment=XDG_RUNTIME_DIR=/run/user/1000
 Restart=on-failure
 RestartSec=5
 
