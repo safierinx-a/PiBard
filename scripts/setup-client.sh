@@ -50,8 +50,125 @@ echo "Step 3: Backing up existing configurations..."
 [ -f /etc/asound.conf ] && cp /etc/asound.conf /etc/asound.conf.bak
 
 echo "Step 4: Copying and customizing PiBard client configurations..."
-# Copy initial PipeWire configuration
-cp clients/configs/pipewire-default.conf /etc/pipewire/pipewire.conf
+# Check if PipeWire configuration exists
+if [ -f clients/configs/pipewire-default.conf ]; then
+    # Copy initial PipeWire configuration
+    cp clients/configs/pipewire-default.conf /etc/pipewire/pipewire.conf
+else
+    # Create a minimal PipeWire configuration
+    cat > /etc/pipewire/pipewire.conf << EOL
+# PipeWire configuration file for PiBard clients
+#
+# This configuration sets up virtual sinks for multiple speakers
+#
+
+context.properties = {
+    default.clock.rate = 48000
+    default.clock.quantum = 1024
+    default.clock.min-quantum = 32
+    default.clock.max-quantum = 8192
+}
+
+context.modules = [
+    # Core modules
+    { name = libpipewire-module-rt
+        args = {
+            nice.level = -11
+        }
+    }
+    { name = libpipewire-module-protocol-native }
+    { name = libpipewire-module-client-node }
+    { name = libpipewire-module-adapter }
+    { name = libpipewire-module-metadata }
+
+    # Main snapcast sink
+    { name = libpipewire-module-loopback
+        args = {
+            node.name = "snapcast_sink"
+            capture.props = {
+                media.class = "Audio/Sink"
+                node.name = "snapcast_sink"
+                node.description = "Snapcast Audio"
+            }
+            playback.props = {
+                node.name = "snapcast_playback"
+                media.class = "Audio/Source"
+                audio.position = [ FL FR ]
+            }
+        }
+    }
+
+    # Speaker 1
+    { name = libpipewire-module-loopback
+        args = {
+            node.name = "speaker1_loopback"
+            capture.props = {
+                media.class = "Audio/Sink"
+                node.name = "speaker1"
+                node.description = "Speaker 1"
+                audio.position = [ FL FR ]
+            }
+            playback.props = {
+                media.class = "Audio/Source"
+                node.name = "speaker1_out"
+                audio.position = [ FL FR ]
+                node.target = "alsa_output.platform-bcm2835_audio.stereo-fallback"
+            }
+        }
+    }
+
+    # Speaker 2
+    { name = libpipewire-module-loopback
+        args = {
+            node.name = "speaker2_loopback"
+            capture.props = {
+                media.class = "Audio/Sink"
+                node.name = "speaker2"
+                node.description = "Speaker 2"
+                audio.position = [ FL FR ]
+            }
+            playback.props = {
+                media.class = "Audio/Source"
+                node.name = "speaker2_out"
+                audio.position = [ FL FR ]
+                node.target = "alsa_output.platform-soc_audio.stereo-fallback"
+            }
+        }
+    }
+
+    # Connect snapcast sink to all speakers
+    { name = libpipewire-module-loopback
+        args = {
+            capture.props = {
+                media.class = "Audio/Source"
+                node.name = "snapcast_to_speaker1"
+                source = "snapcast_sink.monitor"
+            }
+            playback.props = {
+                media.class = "Audio/Sink"
+                node.name = "speaker1_in"
+                node.target = "speaker1"
+            }
+        }
+    }
+
+    { name = libpipewire-module-loopback
+        args = {
+            capture.props = {
+                media.class = "Audio/Source"
+                node.name = "snapcast_to_speaker2"
+                source = "snapcast_sink.monitor"
+            }
+            playback.props = {
+                media.class = "Audio/Sink"
+                node.name = "speaker2_in"
+                node.target = "speaker2"
+            }
+        }
+    }
+]
+EOL
+fi
 
 # Configure PipeWire for the correct number of speakers
 if [ "$SPEAKER_COUNT" -eq 1 ]; then
@@ -84,6 +201,10 @@ cp clients/scripts/start-snapclient.sh /usr/local/bin/
 chmod +x /usr/local/bin/start-snapclient.sh
 
 echo "Step 6: Setting up MQTT volume control..."
+# Get the current user
+CURRENT_USER=$(logname)
+CURRENT_UID=$(id -u $CURRENT_USER)
+
 # Copy the volume control script and package.json
 cp client/volume-control.js /opt/pibard/
 cp client/package.json /opt/pibard/
@@ -134,11 +255,9 @@ WantedBy=multi-user.target
 EOL
 
 # Modify the service to use the local user instead of hardcoded "pi"
-CURRENT_USER=$(logname)
 sed -i "s/User=pi/User=$CURRENT_USER/" /etc/systemd/system/snapclient.service
 
 # Set the correct runtime directory for the user
-CURRENT_UID=$(id -u $CURRENT_USER)
 sed -i "s|Environment=XDG_RUNTIME_DIR=/run/user/1000|Environment=XDG_RUNTIME_DIR=/run/user/$CURRENT_UID|" /etc/systemd/system/snapclient.service
 
 # Fix the CURRENT_USER in volume control service
@@ -152,9 +271,39 @@ systemctl enable pibard-volume
 systemctl start pibard-volume
 
 echo "Step 8: Configuring PipeWire to start at boot..."
-# Restart PipeWire services for the actual user
-su - $CURRENT_USER -c 'systemctl --user --global enable pipewire pipewire-pulse'
-su - $CURRENT_USER -c 'systemctl --user restart pipewire pipewire-pulse'
+# Enable lingering for the user to keep PipeWire running after logout
+loginctl enable-linger $CURRENT_USER
+
+# Set up a user-service autostart for PipeWire
+mkdir -p /home/$CURRENT_USER/.config/systemd/user/
+cat > /home/$CURRENT_USER/.config/systemd/user/pipewire.service << EOL
+[Unit]
+Description=PipeWire Multimedia Service
+After=pipewire-pulse.service
+
+[Service]
+ExecStart=/usr/bin/pipewire
+
+[Install]
+WantedBy=default.target
+EOL
+
+cat > /home/$CURRENT_USER/.config/systemd/user/pipewire-pulse.service << EOL
+[Unit]
+Description=PipeWire PulseAudio Service
+
+[Service]
+ExecStart=/usr/bin/pipewire-pulse
+
+[Install]
+WantedBy=default.target
+EOL
+
+# Fix permissions
+chown -R $CURRENT_USER:$CURRENT_USER /home/$CURRENT_USER/.config
+
+# Use systemctl --global instead of --user
+systemctl --global enable pipewire.service pipewire-pulse.service
 
 echo "Step 9: Setting audio permissions..."
 usermod -a -G audio $CURRENT_USER
