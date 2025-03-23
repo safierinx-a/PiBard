@@ -22,17 +22,18 @@ fi
 echo "Step 1: Installing required dependencies..."
 apt update
 apt install -y snapserver pipewire pipewire-pulse pipewire-audio-client-libraries \
-  alsa-utils shairport-sync pulseaudio-dlna bluetooth bluez \
+  alsa-utils shairport-sync bluetooth bluez \
   libasound2-plugins libbluetooth3 bluez-tools \
   nodejs npm
 
 echo "Step 2: Creating necessary directories..."
 mkdir -p /etc/snapserver
-mkdir -p /etc/pipewire
+mkdir -p /var/run/snapserver
+mkdir -p /var/lib/snapserver
+mkdir -p /usr/share/snapserver/snapweb
 
-echo "Step 3: Backing up existing configurations..."
-[ -f /etc/snapserver.conf ] && cp /etc/snapserver.conf /etc/snapserver.conf.bak
-[ -f /etc/pipewire/pipewire.conf ] && cp /etc/pipewire/pipewire.conf /etc/pipewire/pipewire.conf.bak
+echo "Step 3: Setting correct permissions..."
+chown -R _snapserver:_snapserver /var/run/snapserver /var/lib/snapserver
 
 echo "Step 4: Copying PiBard server configurations..."
 cp server/configs/snapserver.conf /etc/snapserver.conf
@@ -48,19 +49,35 @@ echo "Step 6: Installing and configuring the control interface..."
 cd control-interface
 npm install
 npm run build
-mkdir -p /usr/share/snapserver/snapweb
 cp -r public/* /usr/share/snapserver/snapweb/
 cd ..
 
 echo "Step 7: Setting up services..."
-# Ensure systemd can connect to the system bus
-export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket
+# Create systemd service file
+cat > /usr/lib/systemd/system/snapserver.service << EOL
+[Unit]
+Description=Snapcast server
+Documentation=man:snapserver(1)
+Wants=network-online.target avahi-daemon.service
+After=network-online.target time-sync.target avahi-daemon.service
 
-# Enable and restart Snapserver
+[Service]
+EnvironmentFile=-/etc/default/snapserver
+ExecStart=/usr/bin/snapserver --logging.sink=system \$SNAPSERVER_OPTS
+User=_snapserver
+Group=_snapserver
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOL
+
+# Enable and start services
+systemctl daemon-reload
 systemctl enable snapserver
 systemctl restart snapserver
 
-# Restart PipeWire services for the actual user, not root
+# Restart PipeWire services for the actual user
 ACTUAL_USER=$(logname)
 ACTUAL_UID=$(id -u $ACTUAL_USER)
 export XDG_RUNTIME_DIR=/run/user/$ACTUAL_UID
@@ -105,7 +122,6 @@ echo "Your server is now configured with the following services:"
 echo " - Snapcast server (audio streaming)"
 echo " - PipeWire (audio processing)"
 echo " - Shairport-sync (AirPlay receiver)"
-echo " - PulseAudio-DLNA (DLNA/UPnP receiver)"
 echo " - Bluetooth Audio (Bluetooth A2DP receiver)"
 echo " - PiBard Control Interface (volume/speaker control)"
 echo ""
