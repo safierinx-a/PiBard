@@ -114,8 +114,24 @@ WantedBy=multi-user.target
 EOL
 
 echo "Step 7: Setting up services..."
-# Copy and customize systemd service
-cp clients/configs/snapclient.service /etc/systemd/system/
+# Create the systemd service file directly
+cat > /etc/systemd/system/snapclient.service << EOL
+[Unit]
+Description=Snapcast client
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+ExecStart=/usr/local/bin/start-snapclient.sh
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOL
 
 # Modify the service to use the local user instead of hardcoded "pi"
 CURRENT_USER=$(logname)
