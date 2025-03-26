@@ -48,7 +48,16 @@ chown -R _snapserver:_snapserver /var/run/snapserver /var/lib/snapserver
 echo "Step 4: Copying PiBard server configurations..."
 cp server/configs/snapserver.conf /etc/snapserver.conf
 
-# Create WirePlumber configuration for Bluetooth
+# Set up PipeWire configuration for system audio capture
+mkdir -p /etc/pipewire/pipewire.conf.d
+cp server/configs/pipewire-snapcast.conf /etc/pipewire/pipewire.conf.d/99-snapcast.conf
+
+# Restart PipeWire to apply changes
+ACTUAL_USER=$(logname)
+ACTUAL_UID=$(id -u $ACTUAL_USER)
+export XDG_RUNTIME_DIR=/run/user/$ACTUAL_UID
+su - $ACTUAL_USER -c 'systemctl --user restart pipewire pipewire-pulse'
+
 echo "Step 5: Configuring Bluetooth audio..."
 mkdir -p /etc/wireplumber/bluetooth.lua.d/
 cat > /etc/wireplumber/bluetooth.lua.d/51-bluez-config.lua << EOL
